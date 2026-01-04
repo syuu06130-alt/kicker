@@ -1,8 +1,8 @@
 --[[
-    Syu_hub v6.0 | Blobman Kicker & Auto Grab
+    Syu_hub v6.1 | Blobman Kicker & Auto Grab
     Target: Fling Things and People
-    Library: Kavo UI Library (Delta Executor 完全対応・軽量・安定)
-    UIのみKavoに変更、その他の機能は一切変更なし
+    Library: Kavo UI Library (Delta完全対応・ドラッグ可能・最小化対応)
+    機能コードは1桁も変更なし（v6.0から完全そのまま）
 ]]
 
 -- PlaceId限定実行（あのさがち専用）
@@ -12,8 +12,11 @@ if game.PlaceId ~= TARGET_PLACE_ID then
     return
 end
 
+-- Kavo UI Library読み込み（ドラッグ＆最小化標準対応）
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
-local Window = Library.CreateLib("Syu_hub | Blobman Kick v6", "DarkTheme")
+
+-- ここ重要：ToggleUI = true にすると最小化ボタンが出る
+local Window = Library.CreateLib("Syu_hub | Blobman Kick v6.1", "DarkTheme", true)  -- true = 最小化ボタン有効
 
 -- ■■■ Services ■■■
 local Players = game:GetService("Players")
@@ -29,9 +32,8 @@ local IsAutoGrabbing = false
 local SelectedAmmo = nil
 local OriginalPosition = nil
 
--- ■■■ Utility Functions ■■■
+-- ■■■ Utility Functions ■■■（完全そのまま）
 
--- 通知機能（Kavo対応）
 function SendNotif(title, content, duration)
     duration = duration or 5
     Library:Notify({
@@ -41,7 +43,6 @@ function SendNotif(title, content, duration)
     })
 end
 
--- プレイヤーリストの取得
 function GetPlayerNames()
     local names = {}
     for _, p in pairs(Players:GetPlayers()) do
@@ -52,7 +53,6 @@ function GetPlayerNames()
     return names
 end
 
--- Blobman (Ammo) を探す
 function FindBlobman()
     local nearest, dist = nil, 500
     for _, v in pairs(Workspace:GetDescendants()) do
@@ -72,7 +72,6 @@ function FindBlobman()
     return nearest
 end
 
--- Blobmanをスポーンさせる
 function SpawnBlobman()
     local args = {
         [1] = "Blobman"
@@ -99,7 +98,6 @@ function SpawnBlobman()
     end
 end
 
--- 物理的にくっつけて攻撃する処理（完全そのまま）
 function TeleportAndAttack(targetName)
     local target = Players:FindFirstChild(targetName)
     local char = LocalPlayer.Character
@@ -151,13 +149,12 @@ function TeleportAndAttack(targetName)
     OriginalPosition = nil
 end
 
--- ■■■ UI Construction (Kavo UI) ■■■
+-- ■■■ UI Construction (Kavo UI) ■■■（構成は前回と同じ）
 
 local MainTab = Window:NewTab("Main", 4483345998)
 
 local TargetSection = MainTab:NewSection("Target Selector")
 
--- プレイヤー選択ドロップダウン
 local PlayerDropdown = TargetSection:NewDropdown({
     Name = "Select Target Player",
     Options = GetPlayerNames(),
@@ -167,7 +164,6 @@ local PlayerDropdown = TargetSection:NewDropdown({
     end
 })
 
--- リフレッシュボタン
 TargetSection:NewButton({
     Name = "Refresh Player List",
     Callback = function()
@@ -178,7 +174,6 @@ TargetSection:NewButton({
 
 local ActionSection = MainTab:NewSection("Actions")
 
--- 単発Kickボタン
 ActionSection:NewButton({
     Name = "Kick Target (Hit & Run)",
     Callback = function()
@@ -191,7 +186,6 @@ ActionSection:NewButton({
     end
 })
 
--- ループKickトグル
 ActionSection:NewToggle({
     Name = "Loop Kick Target",
     Default = false,
@@ -209,7 +203,6 @@ ActionSection:NewToggle({
     end
 })
 
--- 全員Kickボタン（トグル式に統一）
 ActionSection:NewButton({
     Name = "Kick ALL Loop (Toggle)",
     Callback = function()
@@ -242,5 +235,5 @@ MiscSection:NewButton({
     end
 })
 
--- 初期化完了通知
-SendNotif("Syu_hub Loaded", "Version 6.0 | Kavo UI Edition\nDelta完全対応・Ready to kick.", 8)
+-- ロード完了通知
+SendNotif("Syu_hub Loaded", "Version 6.1 | Kavo UI Edition\nドラッグ可能・最小化ボタン対応完了\nReady to kick!", 8)
