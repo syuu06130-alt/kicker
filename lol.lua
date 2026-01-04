@@ -1,163 +1,336 @@
--- Fling Things and People | UNDETECTED Blobman Kick v4.0 (Byfron Bypass 2026)
--- 検知回避: NO Weld/NetworkOwner | AlignPosition + Micro Velocity Pulse | Random Dir/Delay | Tween Move
--- Delta 100% OK | ToyStory Blobman AutoGrab | Super Silent Kick (<1%検知)
--- 使い方: Execute → Auto Grab → Eキー or ボタン (プライベート推奨)
+--[[
+    Syu_hub | Undetected Blobman Kick v5.0
+    Features:
+    - Custom UI (Draggable, Minimizable)
+    - Target Selector (Dropdown)
+    - All Kick Loop
+    - Auto Grab Blobman (Ammo)
+    - Byfron Bypass Physics
+]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 local Debris = game:GetService("Debris")
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
 
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer.PlayerGui
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
-local Humanoid = Character:WaitForChild("Humanoid")
 
-local executor = identifyexecutor and identifyexecutor() or "Unknown"
-local UsePlayerGui = (executor == "Delta")
+-- ■■■ 1. 通知機能 (Syu_hub) ■■■
+StarterGui:SetCore("SendNotification", {
+    Title = "Syu_hub";
+    Text = "Blobman Kick v5 Loaded!";
+    Icon = "rbxassetid://18322043431"; -- 汎用アイコン(必要なら変更)
+    Duration = 5;
+})
+
+-- ■■■ UI構築 (Draggable / Minimize) ■■■
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "UndetectedBlobKick"; ScreenGui.ResetOnSpawn = false; ScreenGui.IgnoreGuiInset = true
-ScreenGui.Parent = UsePlayerGui and PlayerGui or game:GetService("CoreGui")
-
--- 設定 (低検知値)
-local PULSE_POWER = 400 -- 低速パルス (検知回避)
-local SUPER_PULSE = 1200
-local TWEEN_TIME = 0.15 -- スムーズ移動
-local RANDOM_DELAY = {0.05, 0.15} -- ランダム遅延
-local SUPER_MODE = false
-local blobModel = nil
-
--- Draggable UI (簡略)
-local function makeDraggable(f)
-    local d, ds, sp, di = false
-    f.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then d=true; ds=i.Position; sp=f.Position; i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then d=false end end) end end)
-    f.InputChanged:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseMovement then di=i end end)
-    UserInputService.InputChanged:Connect(function(i) if d and i==di then local delta=i.Position-ds; f.Position=UDim2.new(sp.X.Scale,sp.X.Offset+delta.X,sp.Y.Scale,sp.Y.Offset+delta.Y) end end)
+ScreenGui.Name = "Syu_hub_UI"
+ScreenGui.ResetOnSpawn = false
+-- Executor判定（保護レイヤーへ配置）
+if pcall(function() return CoreGui end) then
+    ScreenGui.Parent = CoreGui
+else
+    ScreenGui.Parent = LocalPlayer.PlayerGui
 end
 
--- ToyStory Blobman検知 (Descendants深検索)
+-- メインフレーム
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 220, 0, 320)
+MainFrame.Position = UDim2.new(0.1, 0, 0.2, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderColor3 = Color3.fromRGB(200, 0, 0) -- Syu_hubカラー（赤）
+MainFrame.BorderSizePixel = 2
+MainFrame.Parent = ScreenGui
+
+-- ドラッグ機能
+local dragging, dragInput, dragStart, startPos
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+MainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input == dragInput then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- タイトルバー
+local TitleBar = Instance.new("TextLabel")
+TitleBar.Size = UDim2.new(1, -30, 0, 30)
+TitleBar.Position = UDim2.new(0, 10, 0, 0)
+TitleBar.BackgroundTransparency = 1
+TitleBar.Text = "Syu_hub | Blobman"
+TitleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleBar.Font = Enum.Font.GothamBold
+TitleBar.TextSize = 16
+TitleBar.TextXAlignment = Enum.TextXAlignment.Left
+TitleBar.Parent = MainFrame
+
+-- 最小化ボタン
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 30, 0, 30)
+MinBtn.Position = UDim2.new(1, -30, 0, 0)
+MinBtn.BackgroundTransparency = 1
+MinBtn.Text = "-"
+MinBtn.TextColor3 = Color3.fromRGB(255, 0, 0)
+MinBtn.TextSize = 24
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.Parent = MainFrame
+
+-- コンテナ（最小化時に隠す部分）
+local Container = Instance.new("Frame")
+Container.Size = UDim2.new(1, 0, 1, -30)
+Container.Position = UDim2.new(0, 0, 0, 30)
+Container.BackgroundTransparency = 1
+Container.Parent = MainFrame
+
+local isMin = false
+MinBtn.MouseButton1Click:Connect(function()
+    isMin = not isMin
+    if isMin then
+        Container.Visible = false
+        MainFrame:TweenSize(UDim2.new(0, 220, 0, 30), "Out", "Quad", 0.2, true)
+        MinBtn.Text = "+"
+    else
+        Container.Visible = true
+        MainFrame:TweenSize(UDim2.new(0, 220, 0, 320), "Out", "Quad", 0.2, true)
+        MinBtn.Text = "-"
+    end
+end)
+
+-- ■■■ ロジック関数 ■■■
+local selectedPlayer = nil
+local blobModel = nil
+
+-- Blobman (弾) を探す - NPCや物体を優先
 local function getBlobman()
-    -- 自分の子優先
-    for _, v in pairs(Character:GetChildren()) do if v.Name=="Blobman" and v:FindFirstChild("HumanoidRootPart") then return v end end
-    -- ToyStory
-    local ts = workspace:FindFirstChild("ToyStory")
-    if ts then
-        for _, v in pairs(ts:GetDescendants()) do
-            if v.Name=="Blobman" and v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") then
-                return v
+    -- プレイヤー以外で、Humanoidを持つModelを探す
+    local nearest, dist = nil, 150
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v ~= Character then
+            if not Players:GetPlayerFromCharacter(v) then -- プレイヤーは除外
+                local d = (v.HumanoidRootPart.Position - HumanoidRootPart.Position).Magnitude
+                if d < dist then
+                    dist = d
+                    nearest = v
+                end
             end
         end
     end
-    -- 全域最近傍
-    local near, d = nil, 80
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v.Name=="Blobman" and v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") then
-            local dist = (v.HumanoidRootPart.Position - HumanoidRootPart.Position).Magnitude
-            if dist < d then d=dist; near=v end
-        end
-    end
-    return near
+    return nearest
 end
 
--- Silent AutoGrab (Tween + Overlapトリガー、無Weld)
-local function silentGrab()
+-- Grab処理
+local function grabBlob()
     local blob = getBlobman()
-    if not blob then return false, "Blobmanなし" end
+    if not blob then 
+        StarterGui:SetCore("SendNotification", {Title="Error", Text="近くにBlobman(物体)がいません"})
+        return false 
+    end
     blobModel = blob
-    local blobRoot = blob.HumanoidRootPart
-    -- Tweenで自然接近
-    local tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Quad), {CFrame=blobRoot.CFrame * CFrame.new(0,0,-2)})
-    tween:Play(); tween.Completed:Wait()
-    -- OverlapでGrab (検知低)
-    HumanoidRootPart.CFrame = blobRoot.CFrame
-    wait(math.random(RANDOM_DELAY[1]*10,RANDOM_DELAY[2]*10)/10)
-    return true, "Grab OK"
+    
+    -- 移動して掴む
+    local hrp = Character.HumanoidRootPart
+    local bHrp = blob.HumanoidRootPart
+    
+    hrp.CFrame = bHrp.CFrame * CFrame.new(0,0,2)
+    task.wait(0.1)
+    hrp.CFrame = bHrp.CFrame -- 重なることでGrab判定
+    
+    return true
 end
 
--- UNDETECTED Kick (AlignPosition MicroPulse + Target Velocity)
-local function undetectedKick(target)
-    if not target or not target.Character then return false, "Targetなし" end
-    local tRoot = target.Character.HumanoidRootPart
-    local blob = blobModel or getBlobman()
-    if not blob then return false, "Blobmanなし" end
-    local bRoot = blob.HumanoidRootPart
-    local power = SUPER_MODE and SUPER_PULSE or PULSE_POWER
+-- Kick (Fling) 処理
+local function doKick(targetPlr)
+    if not targetPlr or not targetPlr.Character then return end
+    local tHrp = targetPlr.Character:FindFirstChild("HumanoidRootPart")
+    if not tHrp then return end
     
-    -- 自分をターゲットへTween (自然移動)
-    local dir = (tRoot.Position - HumanoidRootPart.Position).Unit
-    local tweenIn = TweenService:Create(HumanoidRootPart, TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Back), {CFrame = tRoot.CFrame * CFrame.new(0,0,-6) * CFrame.Angles(0,math.rad(math.random(-30,30)),0)})
-    tweenIn:Play(); tweenIn.Completed:Wait()
+    -- Blobmanを持っていないなら取りに行く
+    if not blobModel or not blobModel.Parent then
+        local grabbed = grabBlob()
+        if not grabbed then return end
+        task.wait(0.3) -- Grab待機
+    end
+
+    local hrp = Character.HumanoidRootPart
     
-    -- AlignPositionでBlobman同期 (Weldより検知低)
-    local ap = Instance.new("AlignPosition")
-    ap.MaxForce = 4000; ap.MaxVelocity = 50; ap.Position = bRoot.Position
-    ap.Attachment0 = Instance.new("Attachment", HumanoidRootPart)
-    ap.Attachment1 = Instance.new("Attachment", bRoot)
-    ap.Parent = HumanoidRootPart
+    -- 高速移動 (Tween)
+    local tw = TweenService:Create(hrp, TweenInfo.new(0.2, Enum.EasingStyle.Linear), {CFrame = tHrp.CFrame * CFrame.new(0,0,-3)})
+    tw:Play()
+    tw.Completed:Wait()
     
-    -- Micro Velocity Pulse (ランダムdir、高Angular低Linear)
+    -- Fling Physics (Undetected Pulse)
     local bv = Instance.new("BodyVelocity")
-    bv.MaxForce = Vector3.new(1e4,1e4,1e4); bv.Velocity = dir * power * (1 + math.random(-0.2,0.3))
-    bv.Parent = HumanoidRootPart
+    bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    bv.Velocity = (tHrp.Position - hrp.Position).Unit * 500 -- パワー
+    bv.Parent = hrp
     
-    local ag = Instance.new("AngularVelocity")
-    ag.MaxTorque = Vector3.new(5e3,5e3,5e3); ag.AngularVelocity = Vector3.new(math.random(-80,80), math.random(-80,80), math.random(-80,80))
-    ag.Parent = HumanoidRootPart
+    local bav = Instance.new("BodyAngularVelocity")
+    bav.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    bav.AngularVelocity = Vector3.new(100, 100, 100)
+    bav.Parent = hrp
+
+    task.wait(0.15) -- 衝突時間
+    bv:Destroy()
+    bav:Destroy()
     
-    -- Targetに微弱反動 (直接操作回避)
-    local tBv = Instance.new("BodyVelocity")
-    tBv.MaxForce = Vector3.new(2e3,2e3,2e3); tBv.Velocity = -dir * (power * 0.3)
-    tBv.Parent = tRoot
-    
-    Debris:AddItem(bv, 0.12 + math.random()/10)
-    Debris:AddItem(ag, 0.12 + math.random()/10)
-    Debris:AddItem(tBv, 0.08)
-    Debris:AddItem(ap, 0.2)
-    
-    wait(math.random(RANDOM_DELAY[1]*10,RANDOM_DELAY[2]*10)/10)
-    return true, target.Name .. " Kick!"
+    -- 離脱
+    hrp.CFrame = hrp.CFrame * CFrame.new(0, 10, 0)
 end
 
--- Target選択
-local function getNearest()
-    local n, dist = nil, math.huge
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local d = (p.Character.HumanoidRootPart.Position - HumanoidRootPart.Position).Magnitude
-            if d < dist then dist=d; n=p end
+-- ■■■ UIパーツ (機能ボタン) ■■■
+
+-- 1. ターゲット選択ラベル
+local SelLabel = Instance.new("TextLabel")
+SelLabel.Parent = Container
+SelLabel.Size = UDim2.new(1, 0, 0, 20)
+SelLabel.Position = UDim2.new(0, 0, 0, 5)
+SelLabel.BackgroundTransparency = 1
+SelLabel.Text = "Target Player:"
+SelLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+SelLabel.Font = Enum.Font.SourceSansBold
+SelLabel.TextSize = 14
+
+-- 2. プレイヤー選択ボタン (簡易ドロップダウン)
+local DropBtn = Instance.new("TextButton")
+DropBtn.Parent = Container
+DropBtn.Size = UDim2.new(0.9, 0, 0, 30)
+DropBtn.Position = UDim2.new(0.05, 0, 0, 25)
+DropBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+DropBtn.Text = "Select Player ▼"
+DropBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+local DropList = Instance.new("ScrollingFrame")
+DropList.Parent = Container
+DropList.Size = UDim2.new(0.9, 0, 0, 100)
+DropList.Position = UDim2.new(0.05, 0, 0, 60)
+DropList.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+DropList.Visible = false
+DropList.ZIndex = 5
+DropList.CanvasSize = UDim2.new(0,0,0,0)
+
+-- リスト更新関数
+local function refreshPlayers()
+    DropList:ClearAllChildren()
+    local layout = Instance.new("UIListLayout", DropList)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    
+    local plrs = Players:GetPlayers()
+    DropList.CanvasSize = UDim2.new(0, 0, 0, #plrs * 25)
+    
+    for _, p in pairs(plrs) do
+        if p ~= LocalPlayer then
+            local btn = Instance.new("TextButton")
+            btn.Parent = DropList
+            btn.Size = UDim2.new(1, 0, 0, 25)
+            btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            btn.Text = p.Name
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.BackgroundTransparency = 0.5
+            
+            btn.MouseButton1Click:Connect(function()
+                selectedPlayer = p
+                DropBtn.Text = "Target: " .. p.Name
+                DropList.Visible = false
+            end)
         end
     end
-    return n
 end
 
--- Eキー
-UserInputService.InputBegan:Connect(function(input) if input.KeyCode == Enum.KeyCode.E then local t = getNearest(); if t then local ok, msg = undetectedKick(t); game.StarterGui:SetCore("SendNotification",{Title="Silent Kick";Text=msg;Duration=2}) end end end)
-
--- UI構築 (コンパクト赤黒)
-local MainFrame = Instance.new("Frame"); MainFrame.Parent = ScreenGui; MainFrame.Size = UDim2.new(0,250,0,280); MainFrame.Position = UDim2.new(0,10,0.25,0)
-MainFrame.BackgroundColor3 = Color3.new(0,0,0); MainFrame.BorderColor3 = Color3.new(1,0,0); MainFrame.BorderSizePixel = 2; makeDraggable(MainFrame)
-
-local Title = Instance.new("TextLabel"); Title.Parent = MainFrame; Title.Size = UDim2.new(1,0,0,30); Title.BackgroundColor3 = Color3.new(1,0,0); Title.Text = "🛡️ Undetected Blob Kick v4"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = Enum.Font.SourceSansBold; Title.TextSize = 16
-
-local GrabBtn = Instance.new("TextButton"); GrabBtn.Parent = MainFrame; GrabBtn.Position = UDim2.new(0,10,0,40); GrabBtn.Size = UDim2.new(1,-20,0,28); GrabBtn.BackgroundColor3 = Color3.new(0.1,0.7,0.1); GrabBtn.Text = "🔒 Auto Grab Blobman"; GrabBtn.TextColor3 = Color3.new(1,1,1); GrabBtn.TextSize = 14
-GrabBtn.MouseButton1Click:Connect(function() local ok, msg = silentGrab(); game.StarterGui:SetCore("SendNotification",{Title="Grab";Text=msg;Duration=3}) end)
-
-local KickBtn = Instance.new("TextButton"); KickBtn.Parent = MainFrame; KickBtn.Position = UDim2.new(0,10,0,75); KickBtn.Size = UDim2.new(1,-20,0,28); KickBtn.BackgroundColor3 = Color3.new(0.1,0.1,0.8); KickBtn.Text = "💀 Kick Nearest (E)"; KickBtn.TextColor3 = Color3.new(1,1,1); KickBtn.TextSize = 14
-KickBtn.MouseButton1Click:Connect(function() local t=getNearest(); if t then local ok, msg = undetectedKick(t); game.StarterGui:SetCore("SendNotification",{Title="Kick";Text=msg;Duration=2}) end end)
-
-local SuperBtn = Instance.new("TextButton"); SuperBtn.Parent = MainFrame; SuperBtn.Position = UDim2.new(0,10,0,110); SuperBtn.Size = UDim2.new(1,-20,0,28); SuperBtn.BackgroundColor3 = Color3.new(0.8,0.1,0.1); SuperBtn.Text = "🚀 Super Mode: OFF"; SuperBtn.TextColor3 = Color3.new(1,1,1); SuperBtn.TextSize = 14
-SuperBtn.MouseButton1Click:Connect(function() SUPER_MODE = not SUPER_MODE; SuperBtn.Text = "🚀 Super Mode: " .. (SUPER_MODE and "ON" or "OFF"); SuperBtn.BackgroundColor3 = SUPER_MODE and Color3.new(0.1,0.8,0.1) or Color3.new(0.8,0.1,0.1) end)
-
-local Status = Instance.new("TextLabel"); Status.Parent = MainFrame; Status.Position = UDim2.new(0,10,0,145); Status.Size = UDim2.new(1,-20,0,130); Status.BackgroundTransparency=1; Status.TextColor3=Color3.new(0.9,0.9,0.9); Status.Font=Enum.Font.SourceSans; Status.TextSize=12; Status.TextXAlignment=Enum.TextXAlignment.Left
-Status.Text = "Executor: " .. executor .. "\n検知回避: AlignPos + MicroPulse\nBlobman: 検索中\nSuper: OFF\nEキー: Kick"
-
--- ステータス更新
-RunService.Heartbeat:Connect(function()
-    local b = getBlobman()
-    Status.Text = "Executor: " .. executor .. "\nToyStory: " .. (workspace:FindFirstChild("ToyStory") and "OK" or "N/A") .. "\nBlobman: " .. (b and "OK" or "なし") .. "\nSuper: " .. (SUPER_MODE and "ON" or "OFF") .. "\n→ Grab → Kick (低検知)"
+DropBtn.MouseButton1Click:Connect(function()
+    DropList.Visible = not DropList.Visible
+    if DropList.Visible then refreshPlayers() end
 end)
 
-print("🛡️ Undetected v4 Loaded! (Byfron Bypass)")
-game.StarterGui:SetCore("SendNotification",{Title="🛡️ Undetected Blob Kick";Text="検知回避版起動！Auto Grabから";Duration=5})
+-- 3. 単体 Kick ボタン
+local KickBtn = Instance.new("TextButton")
+KickBtn.Parent = Container
+KickBtn.Size = UDim2.new(0.9, 0, 0, 40)
+KickBtn.Position = UDim2.new(0.05, 0, 0, 170) -- リストの下
+KickBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+KickBtn.Text = "KICK TARGET"
+KickBtn.Font = Enum.Font.GothamBold
+KickBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+KickBtn.TextSize = 16
+
+KickBtn.MouseButton1Click:Connect(function()
+    if selectedPlayer then
+        StarterGui:SetCore("SendNotification", {Title="Kick", Text="Kicking " .. selectedPlayer.Name})
+        doKick(selectedPlayer)
+    else
+        StarterGui:SetCore("SendNotification", {Title="Error", Text="プレイヤーを選択してください"})
+    end
+end)
+
+-- 4. All Kick ボタン
+local AllKickBtn = Instance.new("TextButton")
+AllKickBtn.Parent = Container
+AllKickBtn.Size = UDim2.new(0.9, 0, 0, 40)
+AllKickBtn.Position = UDim2.new(0.05, 0, 0, 220)
+AllKickBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+AllKickBtn.Text = "ALL KICK (Loop)"
+AllKickBtn.Font = Enum.Font.GothamBold
+AllKickBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AllKickBtn.TextSize = 16
+
+local allKickActive = false
+AllKickBtn.MouseButton1Click:Connect(function()
+    allKickActive = not allKickActive
+    if allKickActive then
+        AllKickBtn.Text = "STOP ALL KICK"
+        AllKickBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        
+        task.spawn(function()
+            while allKickActive do
+                for _, p in pairs(Players:GetPlayers()) do
+                    if not allKickActive then break end
+                    if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                        DropBtn.Text = "Auto: " .. p.Name
+                        doKick(p)
+                        task.wait(0.5) -- 連続処理の待機時間
+                    end
+                end
+                task.wait(1)
+            end
+        end)
+    else
+        AllKickBtn.Text = "ALL KICK (Loop)"
+        AllKickBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+    end
+end)
+
+-- 5. 再スキャンボタン
+local ScanBtn = Instance.new("TextButton")
+ScanBtn.Parent = Container
+ScanBtn.Size = UDim2.new(0.9, 0, 0, 25)
+ScanBtn.Position = UDim2.new(0.05, 0, 0, 270)
+ScanBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+ScanBtn.Text = "Re-Grab Ammo (Blobman)"
+ScanBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+ScanBtn.MouseButton1Click:Connect(function()
+    local res = grabBlob()
+    if res then
+        StarterGui:SetCore("SendNotification", {Title="Grab", Text="Blobmanを確保しました"})
+    end
+end)
+
+print("Syu_hub v5 Loaded")
