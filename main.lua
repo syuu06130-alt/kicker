@@ -1,10 +1,5 @@
--- Fling Things and People | Delta-Compatible Blobman Kick Hub v2.0
--- Delta Executor 完全対応: PlayerGui使用 + identifyexecutor検知
--- 使い方: 
--- 1. Delta Executorで実行
--- 2. ゲーム内でBlobmanをGrab (推奨: 近くのBlobman自動検知)
--- 3. GUIでターゲット選択 or Eキー/ボタンでKick!
--- 新機能: Draggable UI, Super Strength Toggle, Kick All
+-- Fling Things and People | UNDETECTED Blobman Kick v4.1 (Fix)
+-- 修正点: 名前が"Blobman"じゃなくても、近くにあるNPC(プレイヤー以外の人型)を自動認識するように変更
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -13,243 +8,126 @@ local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local PlayerGui = LocalPlayer.PlayerGui
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Executor検知 (Delta対応)
 local executor = identifyexecutor and identifyexecutor() or "Unknown"
 local UsePlayerGui = (executor == "Delta")
-
--- 設定
-local KICK_SPEED = 800
-local KICK_POWER = 20000
-local SUPER_STRENGTH = false
-local KEYBIND = Enum.KeyCode.E
-
--- Draggable関数 (Delta UI改善)
-local function makeDraggable(frame)
-    local dragging = false
-    local dragStart = nil
-    local startPos = nil
-    local UIS = UserInputService
-
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    frame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-
-    UIS.InputChanged:Connect(function(input)
-        if dragging and input == dragInput then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-end
-
--- Blobman検索 (自分の優先 + 自動Spawn代替)
-local function findBlobman()
-    for _, obj in pairs(workspace:GetChildren()) do
-        if obj.Name == "Blobman" and obj:FindFirstChild("HumanoidRootPart") and obj:FindFirstChild("Humanoid") then
-            if obj:FindFirstChild("HumanoidRootPart").Parent == Character then
-                return obj
-            end
-        end
-    end
-    -- 代替: 近くのBlobman
-    local nearest, dist = nil, math.huge
-    for _, obj in pairs(workspace:GetChildren()) do
-        if obj.Name == "Blobman" and obj:FindFirstChild("HumanoidRootPart") then
-            local d = (obj.HumanoidRootPart.Position - HumanoidRootPart.Position).Magnitude
-            if d < dist and d < 50 then
-                dist = d
-                nearest = obj
-            end
-        end
-    end
-    return nearest
-end
-
--- Nearest Target
-local function findNearestTarget()
-    local nearest, dist = nil, math.huge
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local d = (plr.Character.HumanoidRootPart.Position - HumanoidRootPart.Position).Magnitude
-            if d < dist then dist = d; nearest = plr end
-        end
-    end
-    return nearest
-end
-
--- Kick関数 (Blobman強化版)
-local function kickTarget(target)
-    if not target or not target.Character then return end
-    local targetRoot = target.Character.HumanoidRootPart
-    local blobman = findBlobman()
-    
-    if not blobman then
-        game.StarterGui:SetCore("SendNotification", {Title="Delta Blobman Kick"; Text="Blobmanなし！Grabしてね"; Duration=3})
-        return
-    end
-    
-    local blobRoot = blobman.HumanoidRootPart
-    local weld = Instance.new("WeldConstraint", HumanoidRootPart)
-    weld.Part0 = HumanoidRootPart
-    weld.Part1 = blobRoot
-    
-    local dir = (targetRoot.Position - HumanoidRootPart.Position).Unit
-    HumanoidRootPart.CFrame = targetRoot.CFrame * CFrame.new(0,0,-8)
-    
-    if SUPER_STRENGTH then
-        KICK_SPEED = 1500; KICK_POWER = 50000  -- Superモード
-    end
-    
-    local bv = Instance.new("BodyVelocity", HumanoidRootPart)
-    bv.MaxForce = Vector3.new(1e5,1e5,1e5)
-    bv.Velocity = dir * KICK_SPEED
-    
-    local ag = Instance.new("AngularVelocity", HumanoidRootPart)
-    ag.MaxTorque = Vector3.new(1e5,1e5,1e5)
-    ag.AngularVelocity = Vector3.new(math.random(-100,100), math.random(-100,100), math.random(-100,100))
-    
-    Debris:AddItem(bv, 0.5)
-    Debris:AddItem(ag, 0.5)
-    wait(0.2)
-    weld:Destroy()
-    
-    game.StarterGui:SetCore("SendNotification", {Title="Delta Blobman Kick"; Text=target.Name.."をキック！"; Duration=2})
-end
-
--- Super Strength Toggle (投げ強化)
-local function toggleSuper()
-    SUPER_STRENGTH = not SUPER_STRENGTH
-    game.StarterGui:SetCore("SendNotification", {Title="Super Strength"; Text=SUPER_STRENGTH and "ON (強力！)" or "OFF"; Duration=2})
-end
-
--- Kick All (スパム注意)
-local function kickAll()
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            spawn(function() kickTarget(plr) end)
-        end
-    end
-end
-
--- キーE
-UserInputService.InputBegan:Connect(function(input)
-    if input.KeyCode == KEYBIND then
-        kickTarget(findNearestTarget())
-    end
-end)
-
--- Delta対応ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "DeltaBlobmanKick"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.IgnoreGuiInset = true
+ScreenGui.Name = "UndetectedBlobKickFix"; ScreenGui.ResetOnSpawn = false; ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = UsePlayerGui and PlayerGui or game:GetService("CoreGui")
 
--- Main Frame (Draggable + 赤黒テーマ)
-local Frame = Instance.new("Frame")
-Frame.Parent = ScreenGui
-Frame.BackgroundColor3 = Color3.new(0,0,0)
-Frame.BorderColor3 = Color3.new(1,0,0)
-Frame.BorderSizePixel = 3
-Frame.Position = UDim2.new(0, 10, 0.3, 0)
-Frame.Size = UDim2.new(0, 220, 0, 280)
-makeDraggable(Frame)
+-- 設定
+local PULSE_POWER = 400
+local SUPER_PULSE = 1200
+local TWEEN_TIME = 0.15
+local RANDOM_DELAY = {0.05, 0.15}
+local SUPER_MODE = false
+local blobModel = nil
 
--- タイトル
-local Title = Instance.new("TextLabel")
-Title.Parent = Frame
-Title.BackgroundColor3 = Color3.new(1,0,0)
-Title.BorderSizePixel = 0
-Title.Size = UDim2.new(1,0,0,35)
-Title.Font = Enum.Font.SourceSansBold
-Title.Text = "Delta Blobman Kick v2.0"
-Title.TextColor3 = Color3.new(1,1,1)
-Title.TextSize = 18
+-- UIドラッグ関数
+local function makeDraggable(f)
+    local d, ds, sp, di = false
+    f.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then d=true; ds=i.Position; sp=f.Position; i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then d=false end end) end end)
+    f.InputChanged:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseMovement then di=i end end)
+    UserInputService.InputChanged:Connect(function(i) if d and i==di then local delta=i.Position-ds; f.Position=UDim2.new(sp.X.Scale,sp.X.Offset+delta.X,sp.Y.Scale,sp.Y.Offset+delta.Y) end end)
+end
 
--- Kick Nearest
-local KickNearest = Instance.new("TextButton")
-KickNearest.Parent = Frame
-KickNearest.Position = UDim2.new(0,10,0,50)
-KickNearest.Size = UDim2.new(1,-20,0,30)
-KickNearest.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-KickNearest.BorderColor3 = Color3.new(1,0,0)
-KickNearest.BorderSizePixel = 2
-KickNearest.Font = Enum.Font.SourceSans
-KickNearest.Text = "Kick Nearest (Eキー)"
-KickNearest.TextColor3 = Color3.new(1,1,1)
-KickNearest.TextSize = 14
-KickNearest.MouseButton1Click:Connect(function()
-    kickTarget(findNearestTarget())
-end)
+-- ★★★ 修正箇所: 強力な検索ロジック ★★★
+local function getBlobman()
+    -- 既に確保済みの場合は生存確認して返す
+    if blobModel and blobModel.Parent and blobModel:FindFirstChild("HumanoidRootPart") then return blobModel end
 
--- Super Strength
-local SuperBtn = Instance.new("TextButton")
-SuperBtn.Parent = Frame
-SuperBtn.Position = UDim2.new(0,10,0,90)
-SuperBtn.Size = UDim2.new(1,-20,0,30)
-SuperBtn.BackgroundColor3 = Color3.new(0.8,0.2,0.2)
-SuperBtn.BorderColor3 = Color3.new(1,0,0)
-SuperBtn.BorderSizePixel = 2
-SuperBtn.Font = Enum.Font.SourceSans
-SuperBtn.Text = "Super Strength: OFF"
-SuperBtn.TextColor3 = Color3.new(1,1,1)
-SuperBtn.TextSize = 14
-SuperBtn.MouseButton1Click:Connect(function()
-    toggleSuper()
-    SuperBtn.Text = "Super Strength: "..(SUPER_STRENGTH and "ON" or "OFF")
-    SuperBtn.BackgroundColor3 = SUPER_STRENGTH and Color3.new(0.2,0.8,0.2) or Color3.new(0.8,0.2,0.2)
-end)
+    local nearest, dist = nil, 100 -- 半径100スタッド以内を探す
 
--- Kick All (危険)
-local KickAll = Instance.new("TextButton")
-KickAll.Parent = Frame
-KickAll.Position = UDim2.new(0,10,0,130)
-KickAll.Size = UDim2.new(1,-20,0,30)
-KickAll.BackgroundColor3 = Color3.new(0.5,0,0)
-KickAll.BorderColor3 = Color3.new(1,0,0)
-KickAll.BorderSizePixel = 2
-KickAll.Font = Enum.Font.SourceSans
-KickAll.Text = "Kick All (スパム注意!)"
-KickAll.TextColor3 = Color3.new(1,1,1)
-KickAll.TextSize = 14
-KickAll.MouseButton1Click:Connect(kickAll)
+    for _, v in pairs(workspace:GetDescendants()) do
+        -- 条件: Modelであり、HumanoidとRootPartを持ち、かつプレイヤーではない
+        if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") then
+            if not Players:GetPlayerFromCharacter(v) then -- プレイヤーキャラを除外
+                -- 名前チェックを緩和 (Blobman, Dummy, Characterなどを含める)
+                -- 自分のキャラ以外で、かつ距離が近いもの
+                if v ~= Character then
+                    local d = (v.HumanoidRootPart.Position - HumanoidRootPart.Position).Magnitude
+                    if d < dist then
+                        dist = d
+                        nearest = v
+                    end
+                end
+            end
+        end
+    end
+    return nearest
+end
 
--- ステータス
-local Status = Instance.new("TextLabel")
-Status.Parent = Frame
-Status.Position = UDim2.new(0,10,0,170)
-Status.Size = UDim2.new(1,-20,0,40)
-Status.BackgroundTransparency = 1
-Status.Font = Enum.Font.SourceSans
-Status.Text = "Executor: "..executor.."\nBlobman: 検索中...\nキー: E"
-Status.TextColor3 = Color3.new(0.8,0.8,0.8)
-Status.TextSize = 12
-Status.TextXAlignment = Enum.TextXAlignment.Left
+-- Silent AutoGrab
+local function silentGrab()
+    local blob = getBlobman()
+    if not blob then return false, "近くにNPCが見つかりません" end
+    blobModel = blob
+    local blobRoot = blob.HumanoidRootPart
+    
+    -- Tween移動
+    local tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Quad), {CFrame=blobRoot.CFrame * CFrame.new(0,0,-2)})
+    tween:Play(); tween.Completed:Wait()
+    
+    -- 重なる
+    HumanoidRootPart.CFrame = blobRoot.CFrame
+    wait(math.random(RANDOM_DELAY[1]*10,RANDOM_DELAY[2]*10)/10)
+    return true, "Grab: " .. blob.Name
+end
 
--- 更新ループ
-RunService.Heartbeat:Connect(function()
-    local blob = findBlobman()
-    Status.Text = "Executor: "..executor.."\nBlobman: "..(blob and "OK" or "なし").."\nキー: E | Super: "..(SUPER_STRENGTH and "ON" or "OFF")
-end)
+-- Kick関数
+local function undetectedKick(target)
+    if not target or not target.Character then return false, "Targetなし" end
+    local tRoot = target.Character.HumanoidRootPart
+    local blob = blobModel or getBlobman()
+    if not blob then return false, "Blobman(NPC)なし" end
+    local bRoot = blob.HumanoidRootPart
+    local power = SUPER_MODE and SUPER_PULSE or PULSE_POWER
+    
+    local dir = (tRoot.Position - HumanoidRootPart.Position).Unit
+    local tweenIn = TweenService:Create(HumanoidRootPart, TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Back), {CFrame = tRoot.CFrame * CFrame.new(0,0,-6)})
+    tweenIn:Play(); tweenIn.Completed:Wait()
+    
+    local ap = Instance.new("AlignPosition")
+    ap.MaxForce = 4000; ap.MaxVelocity = 50; ap.Position = bRoot.Position
+    ap.Attachment0 = Instance.new("Attachment", HumanoidRootPart)
+    ap.Attachment1 = Instance.new("Attachment", bRoot)
+    ap.Parent = HumanoidRootPart
+    
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e4,1e4,1e4); bv.Velocity = dir * power * 1.2
+    bv.Parent = HumanoidRootPart
+    
+    Debris:AddItem(bv, 0.15)
+    Debris:AddItem(ap, 0.2)
+    
+    return true, target.Name .. " Kick!"
+end
 
-print("Delta Blobman Kick Hub Loaded! (PlayerGui: "..tostring(UsePlayerGui)..")")
-game.StarterGui:SetCore("SendNotification", {Title="Delta Hub"; Text="Blobman Kick Ready! Eキー or GUI"; Duration=5})
+local function getNearest()
+    local n, dist = nil, math.huge
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local d = (p.Character.HumanoidRootPart.Position - HumanoidRootPart.Position).Magnitude
+            if d < dist then dist=d; n=p end
+        end
+    end
+    return n
+end
+
+-- UIセットアップ
+local MainFrame = Instance.new("Frame"); MainFrame.Parent = ScreenGui; MainFrame.Size = UDim2.new(0,250,0,180); MainFrame.Position = UDim2.new(0,10,0.3,0)
+MainFrame.BackgroundColor3 = Color3.new(0.1,0.1,0.1); makeDraggable(MainFrame)
+
+local GrabBtn = Instance.new("TextButton"); GrabBtn.Parent = MainFrame; GrabBtn.Size = UDim2.new(1,-10,0,40); GrabBtn.Position = UDim2.new(0,5,0,5); GrabBtn.Text = "AUTO GRAB (ANY NPC)"; GrabBtn.BackgroundColor3 = Color3.new(0,0.5,0)
+GrabBtn.MouseButton1Click:Connect(function() local ok, msg = silentGrab(); print(msg) end)
+
+local KickBtn = Instance.new("TextButton"); KickBtn.Parent = MainFrame; KickBtn.Size = UDim2.new(1,-10,0,40); KickBtn.Position = UDim2.new(0,5,0,50); KickBtn.Text = "KICK NEAREST"; KickBtn.BackgroundColor3 = Color3.new(0,0,0.8)
+KickBtn.MouseButton1Click:Connect(function() local t=getNearest(); if t then undetectedKick(t) end end)
+
+-- Eキー
+UserInputService.InputBegan:Connect(function(input, gp) if not gp and input.KeyCode == Enum.KeyCode.E then local t = getNearest(); if t then undetectedKick(t) end end end)
+
+game.StarterGui:SetCore("SendNotification",{Title="Fix Loaded";Text="NPC自動検索モード起動";Duration=5})
