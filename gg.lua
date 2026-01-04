@@ -1,22 +1,26 @@
 --[[
-    Syu_hub v6.1 | Blobman Kicker & Auto Grab
+    Syu_hub v6.0 | Blobman Kicker & Auto Grab
     Target: Fling Things and People
-    Library: Kavo UI Library (Delta完全対応・ドラッグ可能・最小化対応)
-    機能コードは1桁も変更なし（v6.0から完全そのまま）
+    Library: Rayfield Interface Suite (Delta Compatible)
 ]]
 
--- PlaceId限定実行（あのさがち専用）
-local TARGET_PLACE_ID = 6961824067
-if game.PlaceId ~= TARGET_PLACE_ID then
-    warn("このスクリプトは Fling Things and People (PlaceId: 6961824067) でしか動きません！")
-    return
-end
+-- Rayfield UI ロード
+local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/UI-Interface/CustomFIeld/main/RayField.lua'))()
 
--- Kavo UI Library読み込み（ドラッグ＆最小化標準対応）
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
-
--- ここ重要：ToggleUI = true にすると最小化ボタンが出る
-local Window = Library.CreateLib("Syu_hub | Blobman Kick v6.1", "DarkTheme", true)  -- true = 最小化ボタン有効
+local Window = Rayfield:CreateWindow({
+    Name = "Syu_hub | Blobman Kick v6",
+    LoadingTitle = "Syu_hub v6.0",
+    LoadingSubtitle = "by YourName",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "SyuHub",
+        FileName = "Config"
+    },
+    Discord = {
+        Enabled = false
+    },
+    KeySystem = false
+})
 
 -- ■■■ Services ■■■
 local Players = game:GetService("Players")
@@ -29,17 +33,16 @@ local LocalPlayer = Players.LocalPlayer
 local TargetPlayer = nil
 local IsLoopKicking = false
 local IsAutoGrabbing = false
-local SelectedAmmo = nil
 local OriginalPosition = nil
 
--- ■■■ Utility Functions ■■■（完全そのまま）
+-- ■■■ Utility Functions ■■■ (変更なし)
 
-function SendNotif(title, content, duration)
-    duration = duration or 5
-    Library:Notify({
+function SendNotif(title, content)
+    Rayfield:Notify({
         Title = title,
-        Text = content,
-        Duration = duration
+        Content = content,
+        Duration = 5,
+        Image = 4483345998
     })
 end
 
@@ -73,10 +76,7 @@ function FindBlobman()
 end
 
 function SpawnBlobman()
-    local args = {
-        [1] = "Blobman"
-    }
-    
+    local args = {[1] = "Blobman"}
     local spawned = false
     local remotes = {
         ReplicatedStorage:FindFirstChild("SpawnItem"),
@@ -128,7 +128,6 @@ function TeleportAndAttack(targetName)
     end
 
     myHrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 1) 
-    
     task.wait(0.01) 
     
     local bv = Instance.new("BodyAngularVelocity")
@@ -149,32 +148,34 @@ function TeleportAndAttack(targetName)
     OriginalPosition = nil
 end
 
--- ■■■ UI Construction (Kavo UI) ■■■（構成は前回と同じ）
+-- ■■■ UI Construction (Rayfield) ■■■
 
-local MainTab = Window:NewTab("Main", 4483345998)
+local MainTab = Window:CreateTab("Main", 4483345998)
 
-local TargetSection = MainTab:NewSection("Target Selector")
+local TargetSection = MainTab:CreateSection("Target Selector")
 
-local PlayerDropdown = TargetSection:NewDropdown({
+local PlayerDropdown = MainTab:CreateDropdown({
     Name = "Select Target Player",
     Options = GetPlayerNames(),
+    CurrentOption = "...",
+    Flag = "TargetPlayer",
     Callback = function(Value)
         TargetPlayer = Value
         SendNotif("Selected", "Target: " .. Value)
     end
 })
 
-TargetSection:NewButton({
+MainTab:CreateButton({
     Name = "Refresh Player List",
     Callback = function()
-        PlayerDropdown:Update(GetPlayerNames())
+        PlayerDropdown:Refresh(GetPlayerNames())
         SendNotif("Refreshed", "Player list updated.")
     end
 })
 
-local ActionSection = MainTab:NewSection("Actions")
+local ActionSection = MainTab:CreateSection("Actions")
 
-ActionSection:NewButton({
+MainTab:CreateButton({
     Name = "Kick Target (Hit & Run)",
     Callback = function()
         if TargetPlayer then
@@ -186,9 +187,10 @@ ActionSection:NewButton({
     end
 })
 
-ActionSection:NewToggle({
+local LoopToggle = MainTab:CreateToggle({
     Name = "Loop Kick Target",
-    Default = false,
+    CurrentValue = false,
+    Flag = "LoopKick",
     Callback = function(Value)
         IsLoopKicking = Value
         if Value and TargetPlayer then
@@ -203,10 +205,11 @@ ActionSection:NewToggle({
     end
 })
 
-ActionSection:NewButton({
+MainTab:CreateButton({
     Name = "Kick ALL Loop (Toggle)",
     Callback = function()
         IsLoopKicking = not IsLoopKicking
+        LoopToggle:Set(IsLoopKicking) -- トグルの見た目を同期
         if IsLoopKicking then
             SendNotif("ALL KICK", "Starting massacre...")
             task.spawn(function()
@@ -226,9 +229,9 @@ ActionSection:NewButton({
     end
 })
 
-local MiscSection = MainTab:NewSection("Misc / Settings")
+local MiscSection = MainTab:CreateSection("Misc / Settings")
 
-MiscSection:NewButton({
+MainTab:CreateButton({
     Name = "Force Spawn Blobman",
     Callback = function()
         SpawnBlobman()
@@ -236,4 +239,4 @@ MiscSection:NewButton({
 })
 
 -- ロード完了通知
-SendNotif("Syu_hub Loaded", "Version 6.1 | Kavo UI Edition\nドラッグ可能・最小化ボタン対応完了\nReady to kick!", 8)
+SendNotif("Syu_hub Loaded", "Version 6.0 | Rayfield UI (Delta対応)\nReady to kick.")
