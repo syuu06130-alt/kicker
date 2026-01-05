@@ -1,26 +1,14 @@
 --[[
     Syu_hub v6.0 | Blobman Kicker & Auto Grab
     Target: Fling Things and People
-    Library: Rayfield Interface Suite (Delta Compatible)
+    Library: Linoria Library (Stable, Modern, Delta Compatible)
 ]]
 
--- Rayfield UI ロード
-local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/UI-Interface/CustomFIeld/main/RayField.lua'))()
-
-local Window = Rayfield:CreateWindow({
-    Name = "Syu_hub | Blobman Kick v6",
-    LoadingTitle = "Syu_hub v6.0",
-    LoadingSubtitle = "by YourName",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "SyuHub",
-        FileName = "Config"
-    },
-    Discord = {
-        Enabled = false
-    },
-    KeySystem = false
-})
+-- Linoria Library のロード
+local repo = 'https://raw.githubusercontent.com/wally-rblx/LinoriaLib/main/'
+local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
+local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
+local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
 
 -- ■■■ Services ■■■
 local Players = game:GetService("Players")
@@ -32,18 +20,12 @@ local LocalPlayer = Players.LocalPlayer
 -- ■■■ Variables ■■■
 local TargetPlayer = nil
 local IsLoopKicking = false
-local IsAutoGrabbing = false
 local OriginalPosition = nil
 
--- ■■■ Utility Functions ■■■ (変更なし)
+-- ■■■ Utility Functions ■■■
 
 function SendNotif(title, content)
-    Rayfield:Notify({
-        Title = title,
-        Content = content,
-        Duration = 5,
-        Image = 4483345998
-    })
+    Library:Notify(string.format("[Syu_hub] %s: %s", title, content), 5)
 end
 
 function GetPlayerNames()
@@ -76,7 +58,7 @@ function FindBlobman()
 end
 
 function SpawnBlobman()
-    local args = {[1] = "Blobman"}
+    local args = { [1] = "Blobman" }
     local spawned = false
     local remotes = {
         ReplicatedStorage:FindFirstChild("SpawnItem"),
@@ -148,49 +130,48 @@ function TeleportAndAttack(targetName)
     OriginalPosition = nil
 end
 
--- ■■■ UI Construction (Rayfield) ■■■
+-- ■■■ UI Construction ■■■
 
-local MainTab = Window:CreateTab("Main", 4483345998)
+local Window = Library:CreateWindow({
+    Title = 'Syu_hub | Blobman Kick v6',
+    Center = true,
+    AutoShow = true,
+})
 
-local TargetSection = MainTab:CreateSection("Target Selector")
+local MainTab = Window:AddTab('Main')
 
-local PlayerDropdown = MainTab:CreateDropdown({
-    Name = "Select Target Player",
-    Options = GetPlayerNames(),
-    CurrentOption = "...",
-    Flag = "TargetPlayer",
+local TargetGroup = MainTab:AddLeftGroupbox('Target Selector')
+
+local PlayerDropdown = TargetGroup:AddDropdown('TargetPlayer', {
+    Values = GetPlayerNames(),
+    Default = '',
+    Text = 'Select Target Player',
     Callback = function(Value)
         TargetPlayer = Value
         SendNotif("Selected", "Target: " .. Value)
     end
 })
 
-MainTab:CreateButton({
-    Name = "Refresh Player List",
-    Callback = function()
-        PlayerDropdown:Refresh(GetPlayerNames())
-        SendNotif("Refreshed", "Player list updated.")
+TargetGroup:AddButton('Refresh Player List', function()
+    PlayerDropdown:SetValues(GetPlayerNames())
+    PlayerDropdown:SetValue('')
+    SendNotif("Refreshed", "Player list updated.")
+end)
+
+local ActionGroup = MainTab:AddRightGroupbox('Actions')
+
+ActionGroup:AddButton('Kick Target (Hit & Run)', function()
+    if TargetPlayer then
+        SendNotif("Kicking", "Attacking " .. TargetPlayer)
+        TeleportAndAttack(TargetPlayer)
+    else
+        SendNotif("Error", "プレイヤーを選択してください")
     end
-})
+end)
 
-local ActionSection = MainTab:CreateSection("Actions")
-
-MainTab:CreateButton({
-    Name = "Kick Target (Hit & Run)",
-    Callback = function()
-        if TargetPlayer then
-            SendNotif("Kicking", "Attacking " .. TargetPlayer)
-            TeleportAndAttack(TargetPlayer)
-        else
-            SendNotif("Error", "プレイヤーを選択してください")
-        end
-    end
-})
-
-local LoopToggle = MainTab:CreateToggle({
-    Name = "Loop Kick Target",
-    CurrentValue = false,
-    Flag = "LoopKick",
+ActionGroup:AddToggle('LoopKick', {
+    Text = 'Loop Kick Target',
+    Default = false,
     Callback = function(Value)
         IsLoopKicking = Value
         if Value and TargetPlayer then
@@ -205,38 +186,40 @@ local LoopToggle = MainTab:CreateToggle({
     end
 })
 
-MainTab:CreateButton({
-    Name = "Kick ALL Loop (Toggle)",
-    Callback = function()
-        IsLoopKicking = not IsLoopKicking
-        LoopToggle:Set(IsLoopKicking) -- トグルの見た目を同期
-        if IsLoopKicking then
-            SendNotif("ALL KICK", "Starting massacre...")
-            task.spawn(function()
-                while IsLoopKicking do
-                    for _, p in pairs(Players:GetPlayers()) do
-                        if p ~= LocalPlayer and IsLoopKicking then
-                            TeleportAndAttack(p.Name)
-                            task.wait(0.2)
-                        end
+ActionGroup:AddButton('Kick ALL Loop (Toggle)', function()
+    IsLoopKicking = not IsLoopKicking
+    if IsLoopKicking then
+        SendNotif("ALL KICK", "Starting massacre...")
+        task.spawn(function()
+            while IsLoopKicking do
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and IsLoopKicking then
+                        TeleportAndAttack(p.Name)
+                        task.wait(0.2)
                     end
-                    task.wait()
                 end
-            end)
-        else
-            SendNotif("Stopped", "All Kick Stopped.")
-        end
+                task.wait()
+            end
+        end)
+    else
+        SendNotif("Stopped", "All Kick Stopped.")
     end
-})
+end)
 
-local MiscSection = MainTab:CreateSection("Misc / Settings")
+local MiscGroup = MainTab:AddLeftGroupbox('Misc / Settings')
 
-MainTab:CreateButton({
-    Name = "Force Spawn Blobman",
-    Callback = function()
-        SpawnBlobman()
-    end
-})
+MiscGroup:AddButton('Force Spawn Blobman', function()
+    SpawnBlobman()
+end)
 
--- ロード完了通知
-SendNotif("Syu_hub Loaded", "Version 6.0 | Rayfield UI (Delta対応)\nReady to kick.")
+-- オプション機能（コンフィグ保存やテーマ変更）
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({'MenuKeybind'})
+ThemeManager:SetFolder('SyuHub')
+SaveManager:SetFolder('SyuHub')
+SaveManager:BuildConfigSection(MainTab:AddRightTabbox())
+ThemeManager:ApplyToTab(MainTab)
+
+Library:Notify('Syu_hub Loaded | Version 6.0 (Linoria UI)\nReady to kick.', 8)
