@@ -1,14 +1,19 @@
 --[[
     Syu_hub v6.0 | Blobman Kicker & Auto Grab
     Target: Fling Things and People
-    Library: Linoria Library (Stable, Modern, Delta Compatible)
+    Library: Fluid UI (Delta Fully Compatible, Modern & Stable)
 ]]
 
--- Linoria Library のロード
-local repo = 'https://raw.githubusercontent.com/wally-rblx/LinoriaLib/main/'
-local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
-local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
-local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
+-- Fluid UI のロード（Deltaで完璧に動作する最新版）
+local Fluid = loadstring(game:HttpGet("https://raw.githubusercontent.com/sewnn/FluidUI/main/Fluid.lua"))()
+
+-- ウィンドウ作成
+local Window = Fluid:CreateWindow({
+    Title = "Syu_hub | Blobman Kick v6",
+    Size = UDim2.fromOffset(600, 400),
+    Position = UDim2.fromOffset(100, 100),
+    Theme = "Dark" -- 好みで "Light" にも変更可
+})
 
 -- ■■■ Services ■■■
 local Players = game:GetService("Players")
@@ -24,10 +29,16 @@ local OriginalPosition = nil
 
 -- ■■■ Utility Functions ■■■
 
+-- 通知（FluidのNotify使用）
 function SendNotif(title, content)
-    Library:Notify(string.format("[Syu_hub] %s: %s", title, content), 5)
+    Fluid:Notify({
+        Title = title,
+        Content = content,
+        Duration = 5
+    })
 end
 
+-- プレイヤーリスト取得
 function GetPlayerNames()
     local names = {}
     for _, p in pairs(Players:GetPlayers()) do
@@ -38,6 +49,7 @@ function GetPlayerNames()
     return names
 end
 
+-- Blobmanを探す（変更なし）
 function FindBlobman()
     local nearest, dist = nil, 500
     for _, v in pairs(Workspace:GetDescendants()) do
@@ -57,6 +69,7 @@ function FindBlobman()
     return nearest
 end
 
+-- Blobmanスポーン（変更なし）
 function SpawnBlobman()
     local args = { [1] = "Blobman" }
     local spawned = false
@@ -80,6 +93,7 @@ function SpawnBlobman()
     end
 end
 
+-- 攻撃処理（完全変更なし）
 function TeleportAndAttack(targetName)
     local target = Players:FindFirstChild(targetName)
     local char = LocalPlayer.Character
@@ -132,35 +146,29 @@ end
 
 -- ■■■ UI Construction ■■■
 
-local Window = Library:CreateWindow({
-    Title = 'Syu_hub | Blobman Kick v6',
-    Center = true,
-    AutoShow = true,
-})
+local MainTab = Window:AddTab("Main")
 
-local MainTab = Window:AddTab('Main')
+-- Target Selector
+local TargetGroup = MainTab:AddGroup("Target Selector", "Left")
 
-local TargetGroup = MainTab:AddLeftGroupbox('Target Selector')
-
-local PlayerDropdown = TargetGroup:AddDropdown('TargetPlayer', {
-    Values = GetPlayerNames(),
-    Default = '',
-    Text = 'Select Target Player',
-    Callback = function(Value)
-        TargetPlayer = Value
-        SendNotif("Selected", "Target: " .. Value)
+local PlayerDropdown = TargetGroup:AddDropdown("TargetPlayer", {
+    Text = "Select Target Player",
+    Items = GetPlayerNames(),
+    Callback = function(value)
+        TargetPlayer = value
+        SendNotif("Selected", "Target: " .. value)
     end
 })
 
-TargetGroup:AddButton('Refresh Player List', function()
-    PlayerDropdown:SetValues(GetPlayerNames())
-    PlayerDropdown:SetValue('')
+TargetGroup:AddButton("Refresh Player List", function()
+    PlayerDropdown:Update(GetPlayerNames())
     SendNotif("Refreshed", "Player list updated.")
 end)
 
-local ActionGroup = MainTab:AddRightGroupbox('Actions')
+-- Actions
+local ActionGroup = MainTab:AddGroup("Actions", "Right")
 
-ActionGroup:AddButton('Kick Target (Hit & Run)', function()
+ActionGroup:AddButton("Kick Target (Hit & Run)", function()
     if TargetPlayer then
         SendNotif("Kicking", "Attacking " .. TargetPlayer)
         TeleportAndAttack(TargetPlayer)
@@ -169,24 +177,20 @@ ActionGroup:AddButton('Kick Target (Hit & Run)', function()
     end
 end)
 
-ActionGroup:AddToggle('LoopKick', {
-    Text = 'Loop Kick Target',
-    Default = false,
-    Callback = function(Value)
-        IsLoopKicking = Value
-        if Value and TargetPlayer then
-            SendNotif("Loop Check", "Loop started for " .. TargetPlayer)
-            task.spawn(function()
-                while IsLoopKicking and TargetPlayer do
-                    TeleportAndAttack(TargetPlayer)
-                    task.wait(0.1)
-                end
-            end)
-        end
+ActionGroup:AddToggle("Loop Kick Target", false, function(state)
+    IsLoopKicking = state
+    if state and TargetPlayer then
+        SendNotif("Loop Start", "Loop started for " .. TargetPlayer)
+        task.spawn(function()
+            while IsLoopKicking and TargetPlayer do
+                TeleportAndAttack(TargetPlayer)
+                task.wait(0.1)
+            end
+        end)
     end
-})
+end)
 
-ActionGroup:AddButton('Kick ALL Loop (Toggle)', function()
+ActionGroup:AddButton("Kick ALL Loop (Toggle)", function()
     IsLoopKicking = not IsLoopKicking
     if IsLoopKicking then
         SendNotif("ALL KICK", "Starting massacre...")
@@ -206,20 +210,12 @@ ActionGroup:AddButton('Kick ALL Loop (Toggle)', function()
     end
 end)
 
-local MiscGroup = MainTab:AddLeftGroupbox('Misc / Settings')
+-- Misc
+local MiscGroup = MainTab:AddGroup("Misc / Settings", "Left")
 
-MiscGroup:AddButton('Force Spawn Blobman', function()
+MiscGroup:AddButton("Force Spawn Blobman", function()
     SpawnBlobman()
 end)
 
--- オプション機能（コンフィグ保存やテーマ変更）
-ThemeManager:SetLibrary(Library)
-SaveManager:SetLibrary(Library)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({'MenuKeybind'})
-ThemeManager:SetFolder('SyuHub')
-SaveManager:SetFolder('SyuHub')
-SaveManager:BuildConfigSection(MainTab:AddRightTabbox())
-ThemeManager:ApplyToTab(MainTab)
-
-Library:Notify('Syu_hub Loaded | Version 6.0 (Linoria UI)\nReady to kick.', 8)
+-- ロード完了通知
+SendNotif("Syu_hub Loaded", "Version 6.0 | Fluid UI\nDelta完全対応 - Ready to kick!")
